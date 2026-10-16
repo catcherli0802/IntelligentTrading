@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import norm
 from datetime import datetime
 
-st.set_page_config(page_title="Intelligent Alpha Trading", page_icon="🧮")
+st.set_page_config(page_title="Intelligent Alpha Trading", page_icon="🧮", layout="wide")
 st.title("🧮 Option Greeks Calculator")
 st.write("Calculates analytical Black-Scholes Call option Greeks using direct manual input fields.")
 
@@ -45,33 +45,36 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return delta, gamma, vega, theta, rho
 
-# --- USER PARAMETERS PANEL ---
+# --- ROW 1: USER INPUT PARAMETERS ---
 st.subheader("📝 Model Input Parameters")
+in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
 
-col1, col2 = st.columns(2)
-with col1:
-    ticker_sym = st.text_input("Stock Ticker", value="AAPL", help="Enter the asset symbol for tracking context.").upper().strip()
-    current_price = st.number_input("Underlying Stock Price ($)", value=240.00, min_value=0.01, step=1.0, help="The current trading spot price of the stock (S).")
-    strike_input = st.number_input("Target Strike Price ($)", value=245.00, min_value=0.01, step=1.0, help="The option contract execution strike price (K).")
-
-with col2:
-    iv_percent = st.number_input("Market Implied Volatility (σ %)", value=25.0, min_value=0.1, max_value=500.0, step=0.5, help="The expected future volatility percentage priced into the option (sigma).")
-    maturity_input = st.text_input("Maturity Date (YYYY-MM-DD)", value="2026-11-20", help="The expiration timeline target for the option contract.")
+with in_col1:
+    ticker_sym = st.text_input("Stock Ticker", value="AAPL", help="Asset symbol for tracking context.").upper().strip()
+with in_col2:
+    current_price = st.number_input("Stock Price ($)", value=240.00, min_value=0.01, step=1.0, help="Current trading spot price of the stock (S).")
+with in_col3:
+    strike_input = st.number_input("Target Strike ($)", value=245.00, min_value=0.01, step=1.0, help="Option contract execution strike price (K).")
+with in_col4:
+    iv_percent = st.number_input("Implied Volatility (σ %)", value=25.0, min_value=0.1, max_value=500.0, step=0.5, help="Expected future volatility percentage (sigma).")
+with in_col5:
+    maturity_input = st.text_input("Maturity (YYYY-MM-DD)", value="2026-11-20", help="Expiration timeline target for the option contract.")
 
 # Institutional risk-free bond yield baseline configuration proxy (4.50% / r = 0.045)
 r = 0.045
 
-if st.button("Calculate Analytical Greeks"):
-    try:
-        # 1. Parse the target user maturity timeline date string
-        today = datetime.now().date()
-        target_expiry = datetime.strptime(maturity_input.strip(), "%Y-%m-%d").date()
-        days_to_maturity = (target_expiry - today).days
-        
-        if days_to_maturity <= 0:
-            st.error("Maturity date must be a date in the future.")
-            st.stop()
-            
+st.markdown("---")
+
+# Execute calculations automatically based on inputs or via a dedicated form-level layout
+try:
+    # 1. Parse the target user maturity timeline date string
+    today = datetime.now().date()
+    target_expiry = datetime.strptime(maturity_input.strip(), "%Y-%m-%d").date()
+    days_to_maturity = (target_expiry - today).days
+    
+    if days_to_maturity <= 0:
+        st.error("Maturity date must be a date in the future.")
+    else:
         # Convert inputs to exact core engineering float variables
         sigma = iv_percent / 100.0
         T = days_to_maturity / 365.0
@@ -79,29 +82,26 @@ if st.button("Calculate Analytical Greeks"):
         # 2. Run the math calculations
         delta, gamma, vega, theta, rho = calculate_greeks(current_price, strike_input, r, sigma, T)
         
-        # --- RENDER DASHBOARD VISUAL PANEL ---
-        st.markdown("---")
-        st.subheader(f"📊 Financial Dashboard Results ({ticker_sym})")
+        # Convert Delta to an easily readable percentage form
+        delta_percentage = delta * 100
         
-        # Baseline Contract Context Metrics
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Stock Price", f"${current_price:.2f}")
-        m_col2.metric("Market IV", f"{iv_percent:.1f}%")
-        m_col3.metric("Days to Expiry", f"{days_to_maturity} Days")
+        # --- ROW 2: DASHBOARD VISUAL PANEL ---
+        st.subheader(f"📊 Financial Dashboard Results ({ticker_sym}) — {days_to_maturity} Days to Expiry")
         
-        st.markdown("### Risk Management Profiles (Greeks)")
+        res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(5)
         
-        res_col1, res_col2 = st.columns(2)
         with res_col1:
-            st.metric("Delta (Δ)", f"{delta:.4f}", help="Sensitivity to asset price shifts. Dollar option change per $1 stock move.")
-            st.metric("Gamma (Γ)", f"{gamma:.4f}", help="Acceleration rate of Delta. Change in Delta per $1 stock move.")
-            st.metric("Vega (ν)", f"{vega:.4f}", help="Sensitivity to volatility. Dollar option change per 1% move in Volatility.")
-            
+            st.metric("Delta (Δ)", f"{delta_percentage:.2f}%", help="Sensitivity to asset price shifts. Expressed here as equivalent hedge ratio percentage.")
         with res_col2:
+            st.metric("Gamma (Γ)", f"{gamma:.4f}", help="Acceleration rate of Delta. Change in Delta per $1 stock move.")
+        with res_col3:
+            st.metric("Vega (ν)", f"{vega:.4f}", help="Sensitivity to volatility. Dollar option change per 1% move in Volatility.")
+        with res_col4:
             st.metric("Theta (θ)", f"{theta:.4f}", help="Time decay metric. Dollar option value erosion per 1 passing day.")
+        with res_col5:
             st.metric("Rho (ρ)", f"{rho:.4f}", help="Sensitivity to interest rates. Dollar option change per 1% move in macro rates.")
             
-    except ValueError:
-        st.error("Incorrect date format string. Please use YYYY-MM-DD exactly (e.g., 2026-11-20).")
-    except Exception as err:
-        st.error(f"Mathematical execution exception: {str(err)}")
+except ValueError:
+    st.error("Incorrect date format string. Please use YYYY-MM-DD exactly (e.g., 2026-11-20).")
+except Exception as err:
+    st.error(f"Mathematical execution exception: {str(err)}")
