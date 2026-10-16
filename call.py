@@ -4,7 +4,7 @@ from scipy.stats import norm
 from datetime import datetime
 
 st.set_page_config(page_title="Intelligent Alpha Trading", page_icon="🧮", layout="wide")
-st.title("🧮 Option Greeks Calculator")
+st.title("🧮 Option Quantitative Trading")
 st.write("Calculates analytical Black-Scholes Call option Greeks using direct manual input fields.")
 
 # --- CORE QUANTITATIVE MATH ENGINE ---
