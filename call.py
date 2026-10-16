@@ -12,7 +12,7 @@ st.write("Calculates analytical Black-Scholes Call Delta using consolidated data
 ticker_sym = st.text_input("Stock Ticker", value="AAPL").upper().strip()
 
 # We wrap the data fetcher into a unified function to handle network exceptions cleanly
-@st.cache_data(ttl=60) # Caches the data for 60 seconds to bypass Yahoo's rate limits
+@st.cache_resource(ttl=60) # Caches the data for 60 seconds to bypass Yahoo's rate limits
 def fetch_all_market_data(ticker):
     try:
         asset = yf.Ticker(ticker)
