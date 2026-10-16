@@ -10,7 +10,6 @@ st.title("🧮 Option Delta Calculator")
 st.write("Calculates analytical Black-Scholes Call Delta using the official Alpaca Data API feed.")
 
 # --- SECURE CREDENTIAL INPUT PANEL ---
-# Stripped hardcoded keys to prevent account security vulnerabilities
 ALPACA_KEY_ID = st.sidebar.text_input("Alpaca API Key ID", type="password")
 ALPACA_SECRET_KEY = st.sidebar.text_input("Alpaca Secret Key", type="password")
 
@@ -40,7 +39,7 @@ else:
     
     if st.button("Calculate Delta"):
         try:
-            # 1. Fetch current stock spot price using the single asset endpoint layout
+            # 1. Fetch current stock spot price using the verified single asset endpoint layout
             stock_url = f"https://alpaca.markets{ticker_sym}/snapshot"
             stock_res = requests.get(stock_url, headers=headers).json()
             
@@ -85,7 +84,6 @@ else:
             target_date_string = target_expiry.strftime("%y%m%d")
             
             # 4. Filter the OPRA option stream array securely via precise regex matching
-            # Matches text pattern: [Ticker][6 Digits Date][C/P][8 Digits Strike]
             pattern = re.compile(rf"^{ticker_sym}{target_date_string}C(\d+)$")
             
             for symbol, data in option_snapshots.items():
