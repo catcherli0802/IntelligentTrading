@@ -40,21 +40,20 @@ else:
     
     if st.button("Calculate Delta"):
         try:
-            # 1. Fetch current stock spot price from Alpaca Snapshots
-            stock_url = f"https://data.alpaca.markets/v2/stocks/{ticker_sym}/snapshots"
+            # 1. Fetch current stock spot price using the single asset endpoint layout
+            stock_url = f"https://alpaca.markets{ticker_sym}/snapshot"
             stock_res = requests.get(stock_url, headers=headers).json()
             
-            if "snapshot" not in stock_res or not stock_res["snapshot"]:
+            if not stock_res or ("latestTrade" not in stock_res and "minuteBar" not in stock_res):
                 st.error(f"Could not retrieve stock market price for '{ticker_sym}'. Ensure the ticker symbol is valid.")
                 st.stop()
             
-            snapshot_data = stock_res["snapshot"]
             # Fallback chain to handle missing trades during off-market windows
             current_price = None
-            if "latestTrade" in snapshot_data and snapshot_data["latestTrade"]:
-                current_price = snapshot_data["latestTrade"].get("p")
-            if not current_price and "minuteBar" in snapshot_data and snapshot_data["minuteBar"]:
-                current_price = snapshot_data["minuteBar"].get("c")
+            if "latestTrade" in stock_res and stock_res["latestTrade"]:
+                current_price = stock_res["latestTrade"].get("p")
+            if not current_price and "minuteBar" in stock_res and stock_res["minuteBar"]:
+                current_price = stock_res["minuteBar"].get("c")
                 
             if not current_price:
                 st.error(f"No current pricing data available for '{ticker_sym}' right now.")
@@ -74,7 +73,7 @@ else:
                 st.stop()
             
             # 3. Fetch options chain array snapshots
-            options_url = f"https://data.alpaca.markets/v1beta1/options/snapshots/{ticker_sym}"
+            options_url = f"https://alpaca.markets{ticker_sym}"
             options_res = requests.get(options_url, headers=headers).json()
             option_snapshots = options_res.get("snapshots", {})
             
@@ -85,7 +84,7 @@ else:
             # Format comparison string target (e.g. "261120" for Nov 20, 2026)
             target_date_string = target_expiry.strftime("%y%m%d")
             
-            # 4. Filter the OPRA option stream array securely
+            # 4. Filter the OPRA option stream array securely via precise regex matching
             # Matches text pattern: [Ticker][6 Digits Date][C/P][8 Digits Strike]
             pattern = re.compile(rf"^{ticker_sym}{target_date_string}C(\d+)$")
             
