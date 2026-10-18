@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import norm
 from datetime import datetime
 import json
-import os
+import time  # Added for automatic AI exponential backoff retries
 
 try:
     from google import genai
@@ -44,42 +44,53 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. OFFICIAL SDK AI MODEL INGESTION ENGINE (100% HARDCODE-FREE) ---
-def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
+# --- 2. OFFICIAL SDK AI MODEL INGESTION ENGINE WITH RETRY LOGIC (100% HARDCODE-FREE) ---
+def query_gemini_market_intelligence(ticker_symbol: str, api_key: str, chosen_model: str) -> tuple:
     """
-    Leverages the official google-genai client library to seamlessly initialize 
-    and parse structured output frames with zero raw HTTP formatting vulnerabilities.
+    Leverages the official google-genai library with a built-in retry mechanism 
+    to robustly clear temporary 503 high-demand server errors.
     """
     if not SDK_AVAILABLE or not api_key:
         return 0.0, 0.0
         
-    try:
-        client = genai.Client(api_key=api_key.strip())
-        
-        prompt = (
-            f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
-            f"to find the absolute most recent closing/live stock price and the 30-day constant-maturity implied volatility (IV30) "
-            f"for ticker symbol '{ticker_symbol.upper()}'.\n"
-            f"Respond ONLY with a valid JSON block structured exactly like this: \n"
-            f'{{"price": 0.0, "iv": 0.0}}'
-        )
-        
-        # FIXED: Upgraded the targeted model endpoint string strictly to gemini-3.8-flash to clear 404 barriers
-        response = client.models.generate_content(
-            model='gemini-3.8-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
-            ),
-        )
-        
-        if response.text:
-            parsed_ai_data = json.loads(response.text.strip())
-            return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
+    prompt = (
+        f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
+        f"to find the absolute most recent closing/live stock price and the 30-day constant-maturity implied volatility (IV30) "
+        f"for ticker symbol '{ticker_symbol.upper()}'.\n"
+        f"Respond ONLY with a valid JSON block structured exactly like this: \n"
+        f'{{"price": 0.0, "iv": 0.0}}'
+    )
+    
+    max_retries = 3
+    initial_delay = 2  # Seconds
+    
+    for attempt in range(max_retries):
+        try:
+            client = genai.Client(api_key=api_key.strip())
             
-    except Exception as e:
-        st.error(f"Official SDK Transport Exception: {str(e)}")
-        
+            response = client.models.generate_content(
+                model=chosen_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+            
+            if response.text:
+                parsed_ai_data = json.loads(response.text.strip())
+                return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
+                
+        except Exception as e:
+            # Check for standard server capacity warning flags
+            error_str = str(e)
+            if "503" in error_str and attempt < max_retries - 1:
+                st.warning(f"⚠️ Google server busy (503). Retrying ingestion attempt {attempt + 2}/{max_retries} in {initial_delay}s...")
+                time.sleep(initial_delay)
+                initial_delay *= 2  # Exponential delay backoff spacing rule
+            else:
+                st.error(f"Official SDK Transport Exception: {error_str}")
+                break
+                
     return 0.0, 0.0
 
 # --- Initialize dynamic state memory lists for dropdown items ---
@@ -88,7 +99,7 @@ if "ticker_options" not in st.session_state:
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2, ai_col3, ai_col4 = st.columns([3, 2, 1.5, 1.5])
+ai_col1, ai_col2, ai_col_model, ai_col3, ai_col4 = st.columns([2.5, 1.5, 1.5, 1.5, 1.5])
 
 with ai_col1:
     gemini_key = st.text_input(
@@ -96,13 +107,21 @@ with ai_col1:
         type="password",
         placeholder="AIzaSy... or AQ..."
     )
-    st.caption("🔑 Managed securely via the native `google-genai` client standard library.")
 
 with ai_col2:
     target_ticker_select = st.selectbox(
         "Select Target Ticker:",
         options=st.session_state.ticker_options,
         index=0
+    )
+
+with ai_col_model:
+    # NEW: Dropdown selector allowing the user to seamlessly toggle models if Google's beta servers overload
+    target_model_select = st.selectbox(
+        "AI Engine Model Path:",
+        options=["gemini-3.8-flash", "gemini-1.5-flash", "gemini-2.5-flash"],
+        index=0,
+        help="If one model path reports a temporary 503 high-demand error, flip this dropdown to try a completely different server lane!"
     )
 
 with ai_col3:
@@ -136,8 +155,8 @@ if trigger_agent:
     elif not SDK_AVAILABLE:
         st.error("Cannot execute search loop. Ensure google-genai is installed.")
     else:
-        with st.spinner(f"Gemini AI Agent is currently analyzing and researching options data for {target_ticker_select}..."):
-            fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key)
+        with st.spinner(f"Gemini AI Agent is currently conducting option database runs for {target_ticker_select} using {target_model_select}..."):
+            fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key, target_model_select)
                 
             if fetched_price > 0 and fetched_iv > 0:
                 st.session_state.ticker = target_ticker_select
@@ -145,7 +164,7 @@ if trigger_agent:
                 st.session_state.implied_volatility = float(fetched_iv)
                 st.toast(f"Gemini AI Success! Loaded live metrics for {target_ticker_select}", icon="✅")
             else:
-                st.error("AI execution failed. Verify your key permissions or quota restrictions.")
+                st.error("AI execution failed. If server demand is locked up, try toggling the 'AI Engine Model Path' dropdown to another choice.")
 
 # --- ROW 2: STRATEGIC MODEL FIELDS ---
 st.markdown("---")
