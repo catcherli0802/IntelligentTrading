@@ -4,6 +4,7 @@ from scipy.stats import norm
 from datetime import datetime
 import json
 import requests
+import re  # Added for strict regular expression token extraction
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 AI-Driven Option Quantitative Trading")
@@ -40,16 +41,21 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
     Tool execution layer for the AI Agent. Directly pulls JSON market parameters.
     """
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         url = f"https://yahoo.com{ticker_symbol.upper()}"
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200:
-            return json.dumps({"error": "Failed to connect to public market endpoints."})
+            return json.dumps({"error": f"Failed to connect to endpoints. Status code: {response.status_code}"})
             
         data = response.json()
         result = data['optionChain']['result'][0]
+        
+        # 1. Parse dynamic underlying stock spot price
         live_price = float(result['quote']['regularMarketPrice'])
-        calls = result['options'][0]['calls']
+        
+        # 2. Parse live options contracts chain to extract Implied Volatility
+        options_list = result['options'][0]
+        calls = options_list['calls']
         
         # Sample the exact At-The-Money option contract
         closest_option = min(calls, key=lambda x: abs(x['strike'] - live_price))
@@ -68,22 +74,26 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
 def run_ai_agent_ingestion(prompt_input: str):
     """
     Simulates the cognitive workflow of an AI Agent:
-    1. Parses user intent from natural language.
-    2. Recognizes the asset context.
-    3. Triggers the structural market tool.
-    4. Outputs verified numerical parameters.
+    1. Parses user intent from natural language using strict regex parsing.
+    2. Recognizes the exact asset context.
+    3. Triggers the structural market tool safely.
     """
-    # System logic instruction simulating agent reasoning constraints
-    system_instruction = "Extract the asset ticker from the user prompt and query the underlying data tool."
+    # Clean up conversational stop words to avoid mistaking them for tickers
+    ignore_words = {
+        "GET", "FETCH", "THE", "LIVE", "WHAT", "APP", "NOW", 
+        "FOR", "RIGHT", "THIS", "DATA", "STOCK", "PRICE", "METRICS"
+    }
     
-    # Simple semantic extraction layer modeling LLM tool routing
-    words = prompt_input.upper().split()
-    target_ticker = "NVDA" # Default fallback
+    # Extract only clean alphabetical words via Regex boundaries
+    words = re.findall(r'\b[A-Za-z]+\b', prompt_input.upper())
+    
+    target_ticker = "NVDA"  # Default fallback
     for word in words:
-        if len(word) <= 4 and word.isalpha() and word not in ["GET", "FETCH", "THE", "LIVE", "WHAT", "APP"]:
+        if 1 <= len(word) <= 4 and word not in ignore_words:
             target_ticker = word
+            break  # Stop execution loop at the first identified clean ticker
             
-    # AI calls its internal tool
+    # AI calls its internal tool with a guaranteed clean ticker token string
     tool_output_json = ai_market_data_tool(target_ticker)
     parsed_data = json.loads(tool_output_json)
     
@@ -91,7 +101,7 @@ def run_ai_agent_ingestion(prompt_input: str):
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2 = st.columns([3, 1])
+ai_col1, ai_col2 = st.columns()
 
 with ai_col1:
     user_ai_prompt = st.text_input(
