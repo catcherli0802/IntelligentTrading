@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import norm
 from datetime import datetime
 import json
-import time  # Added for automatic AI exponential backoff retries
+import time  
 
 try:
     from google import genai
@@ -66,6 +66,7 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str, chosen_mo
     
     for attempt in range(max_retries):
         try:
+            # Initialize official Google Client framework securely passing the API key token string
             client = genai.Client(api_key=api_key.strip())
             
             response = client.models.generate_content(
@@ -81,12 +82,11 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str, chosen_mo
                 return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
                 
         except Exception as e:
-            # Check for standard server capacity warning flags
             error_str = str(e)
             if "503" in error_str and attempt < max_retries - 1:
                 st.warning(f"⚠️ Google server busy (503). Retrying ingestion attempt {attempt + 2}/{max_retries} in {initial_delay}s...")
                 time.sleep(initial_delay)
-                initial_delay *= 2  # Exponential delay backoff spacing rule
+                initial_delay *= 2  
             else:
                 st.error(f"Official SDK Transport Exception: {error_str}")
                 break
@@ -116,12 +116,12 @@ with ai_col2:
     )
 
 with ai_col_model:
-    # NEW: Dropdown selector allowing the user to seamlessly toggle models if Google's beta servers overload
+    # FIXED: Normalized structural model naming strings to pass standard native validation gates safely
     target_model_select = st.selectbox(
         "AI Engine Model Path:",
-        options=["gemini-3.8-flash", "gemini-1.5-flash", "gemini-2.5-flash"],
+        options=["gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.8-flash"],
         index=0,
-        help="If one model path reports a temporary 503 high-demand error, flip this dropdown to try a completely different server lane!"
+        help="If one model path reports a temporary 503 high-demand error, flip this dropdown to try another lane!"
     )
 
 with ai_col3:
