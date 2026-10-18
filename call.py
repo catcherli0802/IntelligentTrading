@@ -55,7 +55,7 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     
     # POLYMORPHIC BRANCH 1: Enterprise Google Cloud Vertex Token Key Signature
     if api_key_clean.startswith("AQ."):
-        # Routes directly to Vertex AI core publisher endpoint infrastructure locations
+        # FIXED: Configured standard direct unified prediction pathway configuration
         url = "https://googleapis.com"
         headers = {
             "Content-Type": "application/json",
