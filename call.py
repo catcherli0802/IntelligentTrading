@@ -4,7 +4,7 @@ from scipy.stats import norm
 from datetime import datetime
 import json
 import requests
-import re  # Added for strict regular expression token extraction
+import re  
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 AI-Driven Option Quantitative Trading")
@@ -48,14 +48,14 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
             return json.dumps({"error": f"Failed to connect to endpoints. Status code: {response.status_code}"})
             
         data = response.json()
-        result = data['optionChain']['result'][0]
+        result = data['optionChain']['result']
         
         # 1. Parse dynamic underlying stock spot price
         live_price = float(result['quote']['regularMarketPrice'])
         
         # 2. Parse live options contracts chain to extract Implied Volatility
-        options_list = result['options'][0]
-        calls = options_list['calls']
+        options_list = result['options']
+        calls = options_list[0]['calls'] # Targeted index array context fix
         
         # Sample the exact At-The-Money option contract
         closest_option = min(calls, key=lambda x: abs(x['strike'] - live_price))
@@ -101,7 +101,8 @@ def run_ai_agent_ingestion(prompt_input: str):
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2 = st.columns()
+# FIXED: Explicitly specified 2 columns layout configuration parameter
+ai_col1, ai_col2 = st.columns(2)
 
 with ai_col1:
     user_ai_prompt = st.text_input(
