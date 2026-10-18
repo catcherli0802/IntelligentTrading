@@ -35,23 +35,26 @@ def calculate_greeks(S, K, r, sigma, T):
     return price, delta, gamma, vega, theta, rho
 
 # --- 2. LIVE AI MODEL INGESTION ENGINE (100% HARDCODE-FREE) ---
-def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
+def query_gemini_market_intelligence(ticker_symbol: str, api_key: str, project_id: str) -> tuple:
     """
-    Calls the Google Gemini API supporting both enterprise cloud and studio keys.
-    Returns (price, iv) dynamically from the AI model or (0.0, 0.0) if the call fails.
+    Calls the Google Gemini API supporting both Vertex Cloud (AQ.) and standard Studio keys.
     """
     if not api_key:
         return 0.0, 0.0
 
     api_key_clean = api_key.strip()
+    proj_id_clean = project_id.strip() if project_id else "your-project-id"
     
+    # Check if the key structure uses Vertex Cloud layout
     if api_key_clean.startswith("AQ."):
-        url = "https://googleapis.com"
+        # Dynamic structural URL binding utilizing your custom Project ID to clear 404 barriers
+        url = f"https://googleapis.com{proj_id_clean}/locations/us-central1/publishers/google/models/gemini-1.5-flash:predict"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key_clean}"
         }
     else:
+        # Standard Studio Consumer Layout
         url = "https://googleapis.com"
         headers = {
             "Content-Type": "application/json",
@@ -83,9 +86,9 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
             res_json = response.json()
             
             if api_key_clean.startswith("AQ."):
-                raw_text = res_json['predictions']['content']
+                raw_text = res_json['predictions'][0]['content']
             else:
-                raw_text = res_json['candidates']['content']['parts']['text']
+                raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
                 
             parsed_ai_data = json.loads(raw_text.strip())
             return float(parsed_ai_data["price"]), float(parsed_ai_data["iv"])
@@ -94,7 +97,7 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     except Exception as e:
         st.error(f"Error handling AI response buffer: {str(e)}")
         
-    return 0.0, 0.0  # Clean zeroed breakout if the live pipeline breaks
+    return 0.0, 0.0
 
 # --- Initialize dynamic state memory lists for dropdown items ---
 if "ticker_options" not in st.session_state:
@@ -102,15 +105,22 @@ if "ticker_options" not in st.session_state:
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2, ai_col3, ai_col4 = st.columns([2.5, 2, 1.5, 1.5])
+ai_col1, ai_col1_b, ai_col2, ai_col3, ai_col4 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
 
 with ai_col1:
     gemini_key = st.text_input(
-        "Enter your Free Google Gemini API Key:", 
+        "Enter your Google Gemini API Key:", 
         type="password",
-        placeholder="AQ..."
+        placeholder="AQ... or AIzaSy..."
     )
-    st.caption("🔑 Configured for multi-token key validation.")
+
+with ai_col1_b:
+    # NEW: Added explicit Project ID input configuration field to bind AQ. key routes
+    gcp_project_id = st.text_input(
+        "GCP Project ID:", 
+        placeholder="required for AQ. keys",
+        help="Type your Google Cloud Project ID string here (only needed if using an enterprise AQ. key)."
+    )
 
 with ai_col2:
     target_ticker_select = st.selectbox(
@@ -147,9 +157,11 @@ if "implied_volatility" not in st.session_state:
 if trigger_agent:
     if not gemini_key:
         st.error("Please enter a valid Gemini API Key first.")
+    elif gemini_key.strip().startswith("AQ.") and not gcp_project_id:
+        st.error("Google Cloud Project ID is required when utilizing an AQ. enterprise key.")
     else:
         with st.spinner(f"Gemini AI Agent is currently analyzing and researching options data for {target_ticker_select}..."):
-            fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key)
+            fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key, gcp_project_id)
                 
             if fetched_price > 0 and fetched_iv > 0:
                 st.session_state.ticker = target_ticker_select
@@ -157,7 +169,7 @@ if trigger_agent:
                 st.session_state.implied_volatility = float(fetched_iv)
                 st.toast(f"Gemini AI Success! Loaded live metrics for {target_ticker_select}", icon="✅")
             else:
-                st.error("AI execution failed. The model returned zero parameters or an unparseable schema framework response.")
+                st.error("AI execution failed. Verify your key permissions, Project ID configuration, or quota boundaries.")
 
 # --- ROW 2: STRATEGIC MODEL FIELDS ---
 st.markdown("---")
