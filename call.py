@@ -3,21 +3,11 @@ import numpy as np
 from scipy.stats import norm
 from datetime import datetime
 import json
-import time  
-
-try:
-    from google import genai
-    from google.genai import types
-    SDK_AVAILABLE = True
-except ImportError:
-    SDK_AVAILABLE = False
+import requests
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 100% AI-Driven Option Quantitative Trading")
-st.write("Uses the official Google GenAI SDK to dynamically research and ingest real-time market data parameters.")
-
-if not SDK_AVAILABLE:
-    st.error("🚨 Missing Package Dependency: Please add `google-genai` to your `requirements.txt` file on GitHub to enable the AI engine.")
+st.write("Uses the Google Gemini API to dynamically research and ingest real-time market data parameters.")
 
 # --- 1. CORE QUANTITATIVE MATH ENGINE ---
 def calculate_greeks(S, K, r, sigma, T):
@@ -44,15 +34,20 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. OFFICIAL SDK AI MODEL INGESTION ENGINE WITH RETRY LOGIC (100% HARDCODE-FREE) ---
-def query_gemini_market_intelligence(ticker_symbol: str, api_key: str, chosen_model: str) -> tuple:
+# --- 2. RAW FINANCIAL PARAMETER ROUTING ENGINE (100% HARDCODE-FREE) ---
+def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
-    Leverages the official google-genai library with a built-in retry mechanism 
-    to robustly clear temporary 503 high-demand server errors.
+    Bypasses fragile SDK string parsing. Points directly to the rock-solid v1 production endpoint.
     """
-    if not SDK_AVAILABLE or not api_key:
+    if not api_key:
         return 0.0, 0.0
-        
+
+    api_key_clean = api_key.strip()
+    
+    # HARDCODE-FREE REST CHANNEL: Points to stable production v1 framework to eliminate 404 versioning errors
+    url = f"https://googleapis.com{api_key_clean}"
+    headers = {"Content-Type": "application/json"}
+    
     prompt = (
         f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
         f"to find the absolute most recent closing/live stock price and the 30-day constant-maturity implied volatility (IV30) "
@@ -61,36 +56,26 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str, chosen_mo
         f'{{"price": 0.0, "iv": 0.0}}'
     )
     
-    max_retries = 3
-    initial_delay = 2  # Seconds
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    }
     
-    for attempt in range(max_retries):
-        try:
-            # Initialize official Google Client framework securely passing the API key token string
-            client = genai.Client(api_key=api_key.strip())
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=12)
+        if response.status_code == 200:
+            res_json = response.json()
+            raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
+            parsed_ai_data = json.loads(raw_text.strip())
             
-            response = client.models.generate_content(
-                model=chosen_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                ),
-            )
-            
-            if response.text:
-                parsed_ai_data = json.loads(response.text.strip())
-                return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
-                
-        except Exception as e:
-            error_str = str(e)
-            if "503" in error_str and attempt < max_retries - 1:
-                st.warning(f"⚠️ Google server busy (503). Retrying ingestion attempt {attempt + 2}/{max_retries} in {initial_delay}s...")
-                time.sleep(initial_delay)
-                initial_delay *= 2  
-            else:
-                st.error(f"Official SDK Transport Exception: {error_str}")
-                break
-                
+            return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
+        else:
+            st.error(f"Gemini API Server Error ({response.status_code}): {response.text}")
+    except Exception as e:
+        st.error(f"Failed parsing live AI response package: {str(e)}")
+        
     return 0.0, 0.0
 
 # --- Initialize dynamic state memory lists for dropdown items ---
@@ -99,7 +84,7 @@ if "ticker_options" not in st.session_state:
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2, ai_col_model, ai_col3, ai_col4 = st.columns([2.5, 1.5, 1.5, 1.5, 1.5])
+ai_col1, ai_col2, ai_col3, ai_col4 = st.columns([3, 2, 1.5, 1.5])
 
 with ai_col1:
     gemini_key = st.text_input(
@@ -107,21 +92,13 @@ with ai_col1:
         type="password",
         placeholder="AIzaSy... or AQ..."
     )
+    st.caption("🔑 Configured for direct standalone text tokens.")
 
 with ai_col2:
     target_ticker_select = st.selectbox(
         "Select Target Ticker:",
         options=st.session_state.ticker_options,
         index=0
-    )
-
-with ai_col_model:
-    # FIXED: Normalized structural model naming strings to pass standard native validation gates safely
-    target_model_select = st.selectbox(
-        "AI Engine Model Path:",
-        options=["gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.8-flash"],
-        index=0,
-        help="If one model path reports a temporary 503 high-demand error, flip this dropdown to try another lane!"
     )
 
 with ai_col3:
@@ -152,11 +129,9 @@ if "implied_volatility" not in st.session_state:
 if trigger_agent:
     if not gemini_key:
         st.error("Please enter a valid Gemini API Key first.")
-    elif not SDK_AVAILABLE:
-        st.error("Cannot execute search loop. Ensure google-genai is installed.")
     else:
-        with st.spinner(f"Gemini AI Agent is currently conducting option database runs for {target_ticker_select} using {target_model_select}..."):
-            fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key, target_model_select)
+        with st.spinner(f"Gemini AI Agent is currently researching options parameters for {target_ticker_select}..."):
+            fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key)
                 
             if fetched_price > 0 and fetched_iv > 0:
                 st.session_state.ticker = target_ticker_select
@@ -164,7 +139,7 @@ if trigger_agent:
                 st.session_state.implied_volatility = float(fetched_iv)
                 st.toast(f"Gemini AI Success! Loaded live metrics for {target_ticker_select}", icon="✅")
             else:
-                st.error("AI execution failed. If server demand is locked up, try toggling the 'AI Engine Model Path' dropdown to another choice.")
+                st.error("AI Ingestion failure. The model returned 0.0 metrics. Please try running the loop again.")
 
 # --- ROW 2: STRATEGIC MODEL FIELDS ---
 st.markdown("---")
@@ -174,10 +149,10 @@ in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
 with in_col1:
     ticker_sym = st.text_input("Stock Ticker", key="ticker").upper().strip()
 with in_col2:
-    current_price = st.number_input("Stock Price (\$)", min_value=0.0, step=1.0, key="stock_price")
+    current_price = st.number_input("Stock Price ($)", min_value=0.0, step=1.0, key="stock_price")
 with in_col3:
     default_strike = round(current_price) if current_price > 0 else 0.0
-    strike_input = st.number_input("Target Strike (\$)", value=float(default_strike), min_value=0.0, step=1.0)
+    strike_input = st.number_input("Target Strike ($)", value=float(default_strike), min_value=0.0, step=1.0)
 with in_col4:
     iv_percent = st.number_input("Implied Volatility (σ %)", min_value=0.0, max_value=500.0, step=0.5, key="implied_volatility")
 with in_col5:
@@ -205,7 +180,7 @@ if current_price > 0 and iv_percent > 0:
             res_col0, res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(6)
             
             with res_col0:
-                st.metric("Theoretical Value", f"\${theo_price:.2f}")
+                st.metric("Theoretical Value", f"${theo_price:.2f}")
             with res_col1:
                 st.metric("Delta (Δ)", f"{delta * 100:.2f}%")
             with res_col2:
