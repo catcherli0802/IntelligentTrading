@@ -42,20 +42,24 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
     """
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        url = f"https://yahoo.com{ticker_symbol.upper()}"
+        url = f"https://query1.finance.yahoo.com/v7/finance/options/{ticker_symbol.upper()}"
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200:
-            return json.dumps({"error": f"Failed to connect to endpoints. Status code: {response.status_code}"})
+            return json.dumps({"error": f"Ticker '{ticker_symbol}' not recognized by market endpoints."})
             
         data = response.json()
         result = data['optionChain']['result']
+        if not result:
+            return json.dumps({"error": f"No active options data found for ticker '{ticker_symbol}'."})
+            
+        quote_data = result[0].get('quote', {})
+        live_price = float(quote_data.get('regularMarketPrice', 0))
         
-        # 1. Parse dynamic underlying stock spot price
-        live_price = float(result['quote']['regularMarketPrice'])
-        
-        # 2. Parse live options contracts chain to extract Implied Volatility
-        options_list = result['options']
-        calls = options_list[0]['calls'] # Targeted index array context fix
+        options_list = result[0].get('options', [])
+        if not options_list or 'calls' not in options_list[0]:
+            return json.dumps({"error": f"Options chain empty for ticker '{ticker_symbol}'."})
+            
+        calls = options_list[0]['calls']
         
         # Sample the exact At-The-Money option contract
         closest_option = min(calls, key=lambda x: abs(x['strike'] - live_price))
@@ -68,40 +72,43 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json.dumps({"error": f"Failed processing tool data: {str(e)}"})
 
 # --- 3. COUPLING AN OPEN AI-ORCHESTRATION PIPELINE ---
 def run_ai_agent_ingestion(prompt_input: str):
     """
     Simulates the cognitive workflow of an AI Agent:
-    1. Parses user intent from natural language using strict regex parsing.
-    2. Recognizes the exact asset context.
-    3. Triggers the structural market tool safely.
+    Uses strict regex and comprehensive stop-word validation to extract tickers cleanly.
     """
-    # Clean up conversational stop words to avoid mistaking them for tickers
-    ignore_words = {
-        "GET", "FETCH", "THE", "LIVE", "WHAT", "APP", "NOW", 
-        "FOR", "RIGHT", "THIS", "DATA", "STOCK", "PRICE", "METRICS"
+    # Comprehensive set of common words to block them from being treated as tickers
+    stop_words = {
+        "GET", "FETCH", "THE", "LIVE", "WHAT", "APP", "NOW", "AND", "FOR", "RIGHT", 
+        "THIS", "DATA", "STOCK", "PRICE", "METRICS", "INFO", "SHOW", "CHECK", "RUN",
+        "LOOP", "MARKET", "DYNAMIC", "CURRENT", "VAL", "CALL", "PUT", "OPTION", "GREEK"
     }
     
-    # Extract only clean alphabetical words via Regex boundaries
     words = re.findall(r'\b[A-Za-z]+\b', prompt_input.upper())
     
-    target_ticker = "NVDA"  # Default fallback
+    # Strategy 1: Look for words matching common verified tech tickers immediately
+    known_tickers = {"NVDA", "AAPL", "MSFT", "AMD", "TSLA", "GOOG", "META", "AMZN", "NFLX"}
     for word in words:
-        if 1 <= len(word) <= 4 and word not in ignore_words:
-            target_ticker = word
-            break  # Stop execution loop at the first identified clean ticker
+        if word in known_tickers:
+            tool_output = ai_market_data_tool(word)
+            return json.loads(tool_output)
             
-    # AI calls its internal tool with a guaranteed clean ticker token string
+    # Strategy 2: If no known tech ticker matches, pick the first 1-4 letter word not in stop_words
+    target_ticker = "NVDA"  # Default safe backup
+    for word in words:
+        if 1 <= len(word) <= 4 and word not in stop_words:
+            target_ticker = word
+            break
+            
     tool_output_json = ai_market_data_tool(target_ticker)
     parsed_data = json.loads(tool_output_json)
-    
     return parsed_data
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-# FIXED: Explicitly specified 2 columns layout configuration parameter
 ai_col1, ai_col2 = st.columns(2)
 
 with ai_col1:
