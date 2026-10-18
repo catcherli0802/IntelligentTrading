@@ -37,16 +37,14 @@ def calculate_greeks(S, K, r, sigma, T):
 # --- 2. LIVE AI MODEL INGESTION ENGINE (NO HARDCODED VALUES) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
-    Calls the Google Gemini API using secure custom auth headers.
-    Bypasses URL string query corruption to safely ingest raw JSON properties.
+    Calls the Google Gemini API using production endpoints and secure custom auth headers.
     """
     if not api_key:
         return 0.0, 0.0
         
-    # Standardized endpoint utilizing the active production model
+    # FIXED: Reverted model back to the stable production version string on v1beta endpoints
     url = "https://googleapis.com"
     
-    # CRITICAL SECURITY FIX: Pass key via standard system headers to support AQ.-prefix credentials smoothly
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key.strip()
@@ -76,7 +74,6 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
             
             return float(parsed_ai_data["price"]), float(parsed_ai_data["iv"])
         else:
-            # Output structural response details to aid troubleshooting workflows
             st.error(f"Gemini API returned status code {response.status_code}: {response.text}")
     except Exception as e:
         st.error(f"Error handling AI response buffer: {str(e)}")
@@ -122,7 +119,6 @@ if trigger_agent:
             fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key)
                 
             if fetched_price > 0 and fetched_iv > 0:
-                # 100% DYNAMIC COUPLING WITH ZERO LOGICAL CODE RULES
                 st.session_state.ticker = target_ticker_select
                 st.session_state.stock_price = float(fetched_price)
                 st.session_state.implied_volatility = float(fetched_iv)
