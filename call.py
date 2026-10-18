@@ -35,15 +35,14 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. THE AI AGENT INTERNAL DATA TOOL (FIXED & FULLY OPEN ENDPOINT) ---
+# --- 2. THE AI AGENT INTERNAL DATA TOOL ---
 def ai_market_data_tool(ticker_symbol: str) -> str:
     """
     Directly pulls JSON market data parameters using the open, cookie-free v8 chart endpoint.
     """
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        # Switched to public v8 chart endpoint to prevent cookie blockage errors
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker_symbol.upper()}?interval=1d&range=1d"
+        url = f"https://yahoo.com{ticker_symbol.upper()}?interval=1d&range=1d"
         response = requests.get(url, headers=headers, timeout=7)
         
         if response.status_code != 200:
@@ -55,17 +54,15 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
         if not result or len(result) == 0:
             return json.dumps({"error": f"No active trading data available for '{ticker_symbol}'."})
             
-        # Parse live stock spot price from meta array layer
         meta = result[0].get('meta', {})
         live_price = float(meta.get('regularMarketPrice', meta.get('chartPreviousClose', 138.00)))
         
-        # Benchmarked baseline standard IV levels relative to each core technology tier
         ticker_upper = ticker_symbol.upper()
         iv_benchmarks = {
             "NVDA": 35.7, "TSLA": 46.2, "AMD": 38.5, 
             "AAPL": 22.4, "MSFT": 21.8, "AMZN": 24.5, "GOOG": 23.1
         }
-        live_iv = iv_benchmarks.get(ticker_upper, 28.5) # Defaults to 28.5% for general assets
+        live_iv = iv_benchmarks.get(ticker_upper, 28.5)
         
         return json.dumps({
             "ticker": ticker_upper,
@@ -79,8 +76,7 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
 # --- 3. COUPLING AN OPEN AI-ORCHESTRATION PIPELINE ---
 def run_ai_agent_ingestion(prompt_input: str):
     """
-    Simulates the cognitive workflow of an AI Agent:
-    Uses strict regex and stop-word validation to extract tickers cleanly.
+    Simulates the cognitive workflow of an AI Agent.
     """
     stop_words = {
         "GET", "FETCH", "THE", "LIVE", "WHAT", "APP", "NOW", "AND", "FOR", "RIGHT", 
@@ -90,14 +86,12 @@ def run_ai_agent_ingestion(prompt_input: str):
     
     words = re.findall(r'\b[A-Za-z]+\b', prompt_input.upper())
     
-    # Priority Matcher for immediate verification routing
     known_tickers = {"NVDA", "AAPL", "MSFT", "AMD", "TSLA", "GOOG", "META", "AMZN", "NFLX"}
     for word in words:
         if word in known_tickers:
             tool_output = ai_market_data_tool(word)
             return json.loads(tool_output)
             
-    # Fallback lookup selector
     target_ticker = "NVDA"  
     for word in words:
         if 1 <= len(word) <= 4 and word not in stop_words:
@@ -122,16 +116,24 @@ with ai_col2:
     st.write(" ")
     trigger_agent = st.button("🚀 Run AI Ingestion Loop", use_container_width=True)
 
-# Application Session State management to hold live state changes smoothly
-if "ai_data" not in st.session_state:
-    st.session_state.ai_data = {"ticker": "NVDA", "stock_price": 138.00, "implied_volatility": 35.7}
+# Define session state baseline defaults
+if "ticker" not in st.session_state:
+    st.session_state.ticker = "NVDA"
+if "stock_price" not in st.session_state:
+    st.session_state.stock_price = 138.00
+if "implied_volatility" not in st.session_state:
+    st.session_state.implied_volatility = 35.7
 
+# When button is pushed, we write values instantly to the inputs' key state parameters
 if trigger_agent:
     with st.spinner("AI Agent analyzing intent and running open tool execution loops..."):
         agent_result = run_ai_agent_ingestion(user_ai_prompt)
         if "error" not in agent_result:
-            st.session_state.ai_data = agent_result
-            st.toast(f"AI Success! Ingested live data streams for {agent_result['ticker']}", icon="✅")
+            # INSTANT REWRITE OVERWRITE COUPLING:
+            st.session_state.ticker = agent_result["ticker"]
+            st.session_state.stock_price = float(agent_result["stock_price"])
+            st.session_state.implied_volatility = float(agent_result["implied_volatility"])
+            st.toast(f"AI Success! Overwrote inputs with live {agent_result['ticker']} data", icon="✅")
         else:
             st.error(f"AI Agent Tool Breakdown: {agent_result['error']}")
 
@@ -141,14 +143,15 @@ st.subheader("📝 Verified Model Input Parameters")
 in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
 
 with in_col1:
-    ticker_sym = st.text_input("Stock Ticker", value=st.session_state.ai_data["ticker"]).upper().strip()
+    # Explicitly tied via 'key=' to state to enforce a forced interface refresh
+    ticker_sym = st.text_input("Stock Ticker", key="ticker").upper().strip()
 with in_col2:
-    current_price = st.number_input("Stock Price ($)", value=float(st.session_state.ai_data["stock_price"]), min_value=0.01, step=1.0)
+    current_price = st.number_input("Stock Price ($)", min_value=0.01, step=1.0, key="stock_price")
 with in_col3:
     default_strike = round(current_price)
     strike_input = st.number_input("Target Strike ($)", value=float(default_strike), min_value=0.01, step=1.0)
 with in_col4:
-    iv_percent = st.number_input("Implied Volatility (σ %)", value=float(st.session_state.ai_data["implied_volatility"]), min_value=0.1, max_value=500.0, step=0.5)
+    iv_percent = st.number_input("Implied Volatility (σ %)", min_value=0.1, max_value=500.0, step=0.5, key="implied_volatility")
 with in_col5:
     maturity_input = st.text_input("Maturity (YYYY-MM-DD)", value="2026-11-20")
 
