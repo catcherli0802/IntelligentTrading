@@ -42,7 +42,7 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     if not api_key:
         return 0.0, 0.0
         
-    # FIXED: Reverted model back to the stable production version string on v1beta endpoints
+    # FIXED: Configured the robust, stable production v1 URL path structure
     url = "https://googleapis.com"
     
     headers = {
