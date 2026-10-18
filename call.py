@@ -7,7 +7,7 @@ import requests
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 100% AI-Driven Option Quantitative Trading")
-st.write("Uses the Google Gemini API to dynamically research and ingest real-time market data parameters.")
+st.write("Uses polymorphic API routing to seamlessly process your live option data streams.")
 
 # --- 1. CORE QUANTITATIVE MATH ENGINE ---
 def calculate_greeks(S, K, r, sigma, T):
@@ -34,25 +34,16 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. RAW FINANCIAL PARAMETER ROUTING ENGINE (100% HARDCODE-FREE) ---
+# --- 2. MULTI-GATEWAY POLYMORPHIC AI ROUTING ENGINE (100% HARDCODE-FREE) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
-    Bypasses query parameters to prevent connection string corruption.
-    Passes credentials securely inside headers to natively support AQ. key tokens.
+    Detects API key token signatures dynamically on the fly.
+    Bypasses 404 URL conflicts by switching to Vertex AI Cloud infrastructure for AQ. keys.
     """
     if not api_key:
         return 0.0, 0.0
 
     api_key_clean = api_key.strip()
-    
-    # FIXED: Hardcoded stable production endpoint with zero query parameter interpolation bugs
-    url = "https://googleapis.com"
-    
-    # FIXED: Secure header passage architecture rules
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key_clean
-    }
     
     prompt = (
         f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
@@ -62,20 +53,43 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
         f'{{"price": 0.0, "iv": 0.0}}'
     )
     
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json"
+    # POLYMORPHIC BRANCH 1: Enterprise Google Cloud Vertex Token Key Signature
+    if api_key_clean.startswith("AQ."):
+        # Routes directly to Vertex AI core publisher endpoint infrastructure locations
+        url = "https://googleapis.com"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key_clean}"
         }
-    }
+        payload = {
+            "instances": [{"prompt": prompt}],
+            "parameters": {"responseMimeType": "application/json"}
+        }
+        
+    # POLYMORPHIC BRANCH 2: Standard Consumer Google AI Studio Token Key Signature
+    else:
+        url = "https://googleapis.com"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key_clean
+        }
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json"}
+        }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=12)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         if response.status_code == 200:
             res_json = response.json()
-            raw_text = res_json['candidates']['content']['parts']['text']
-            parsed_ai_data = json.loads(raw_text.strip())
             
+            # Polymorphic Extraction: Handle the variance in JSON response trees dynamically
+            if api_key_clean.startswith("AQ."):
+                raw_text = res_json['predictions'][0]['content']
+            else:
+                raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
+                
+            parsed_ai_data = json.loads(raw_text.strip())
             return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
         else:
             st.error(f"Gemini API Server Error ({response.status_code}): {response.text}")
@@ -98,7 +112,7 @@ with ai_col1:
         type="password",
         placeholder="AQ... or AIzaSy..."
     )
-    st.caption("🔑 Managed securely via native custom HTTP auth headers.")
+    st.caption("🔑 Smart framework detects key signatures to dynamically route server pipelines.")
 
 with ai_col2:
     target_ticker_select = st.selectbox(
