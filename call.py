@@ -34,33 +34,29 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. LIVE AI MODEL INGESTION ENGINE (NO HARDCODED VALUES) ---
+# --- 2. LIVE AI MODEL INGESTION ENGINE (100% HARDCODE-FREE) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
     Calls the Google Gemini API supporting both enterprise cloud and studio keys.
+    Returns (price, iv) dynamically from the AI model or (0.0, 0.0) if the call fails.
     """
     if not api_key:
         return 0.0, 0.0
 
     api_key_clean = api_key.strip()
     
-    # SYSTEM UPGRADE: Explicitly branch routing path logic to ensure 'AQ.' keys authenticate properly
     if api_key_clean.startswith("AQ."):
-        # Vertex AI Cloud Service Architecture Route Map
         url = "https://googleapis.com"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key_clean}"
         }
-        prompt_wrapper = "prompt"
     else:
-        # Standard Studio Consumer Key Route Map
         url = "https://googleapis.com"
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": api_key_clean
         }
-        prompt_wrapper = "text"
 
     prompt = (
         f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
@@ -70,7 +66,6 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
         f'{{"price": 0.0, "iv": 0.0}}'
     )
     
-    # Structuring standard polymorphic payload arrays
     if api_key_clean.startswith("AQ."):
         payload = {
             "instances": [{"prompt": prompt}],
@@ -87,31 +82,27 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
         if response.status_code == 200:
             res_json = response.json()
             
-            # Extract out text string slices from targeted response trees
             if api_key_clean.startswith("AQ."):
-                raw_text = res_json['predictions'][0]['content']
+                raw_text = res_json['predictions']['content']
             else:
-                raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
+                raw_text = res_json['candidates']['content']['parts']['text']
                 
             parsed_ai_data = json.loads(raw_text.strip())
             return float(parsed_ai_data["price"]), float(parsed_ai_data["iv"])
-            
         else:
-            # Safe Fallback to standard open ingestion if specific service quotas are undergoing routing changes
-            fallback_matrix = {
-                "NVDA": (214.13, 35.7),
-                "GOOG": (336.91, 23.1),
-                "TSLA": (354.72, 46.2)
-            }
-            return fallback_matrix.get(ticker_symbol.upper(), (0.0, 0.0))
-            
-    except Exception:
-        pass
-    return 214.13, 35.7  # Clean functional fallback safety return
+            st.error(f"Gemini API returned status code {response.status_code}: {response.text}")
+    except Exception as e:
+        st.error(f"Error handling AI response buffer: {str(e)}")
+        
+    return 0.0, 0.0  # Clean zeroed breakout if the live pipeline breaks
+
+# --- Initialize dynamic state memory lists for dropdown items ---
+if "ticker_options" not in st.session_state:
+    st.session_state.ticker_options = ["NVDA", "GOOG", "TSLA"]
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2, ai_col3 = st.columns(3)
+ai_col1, ai_col2, ai_col3, ai_col4 = st.columns([2.5, 2, 1.5, 1.5])
 
 with ai_col1:
     gemini_key = st.text_input(
@@ -123,11 +114,23 @@ with ai_col1:
 
 with ai_col2:
     target_ticker_select = st.selectbox(
-        "Select Target Ticker for real-time AI ingestion:",
-        options=["NVDA", "GOOG", "TSLA"],
+        "Select Target Ticker:",
+        options=st.session_state.ticker_options,
         index=0
     )
+
 with ai_col3:
+    new_custom_ticker = st.text_input("Add Custom Ticker:", placeholder="e.g. AMD, AAPL").upper().strip()
+    click_add = st.button("➕ Add Ticker", use_container_width=True)
+    
+    if click_add and new_custom_ticker:
+        if new_custom_ticker not in st.session_state.ticker_options:
+            st.session_state.ticker_options.append(new_custom_ticker)
+            st.rerun() 
+        else:
+            st.warning("Ticker already exists in choices!")
+
+with ai_col4:
     st.write(" ")
     st.write(" ")
     trigger_agent = st.button("🚀 Run AI Ingestion Loop", use_container_width=True)
@@ -153,6 +156,8 @@ if trigger_agent:
                 st.session_state.stock_price = float(fetched_price)
                 st.session_state.implied_volatility = float(fetched_iv)
                 st.toast(f"Gemini AI Success! Loaded live metrics for {target_ticker_select}", icon="✅")
+            else:
+                st.error("AI execution failed. The model returned zero parameters or an unparseable schema framework response.")
 
 # --- ROW 2: STRATEGIC MODEL FIELDS ---
 st.markdown("---")
@@ -208,4 +213,4 @@ if current_price > 0 and iv_percent > 0:
     except Exception as err:
         st.error(f"Mathematical execution exception: {str(err)}")
 else:
-    st.info("💡 Enter your API Key, select an option ticker above, and click 'Run AI Ingestion Loop' to trigger the live Gemini AI engine.")
+    st.info("💡 Enter your API Key, select or add an option ticker above, and click 'Run AI Ingestion Loop' to trigger the live Gemini AI engine.")
