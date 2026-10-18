@@ -37,16 +37,22 @@ def calculate_greeks(S, K, r, sigma, T):
 # --- 2. RAW FINANCIAL PARAMETER ROUTING ENGINE (100% HARDCODE-FREE) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
-    Bypasses fragile SDK string parsing. Points directly to the rock-solid v1 production endpoint.
+    Bypasses query parameters to prevent connection string corruption.
+    Passes credentials securely inside headers to natively support AQ. key tokens.
     """
     if not api_key:
         return 0.0, 0.0
 
     api_key_clean = api_key.strip()
     
-    # HARDCODE-FREE REST CHANNEL: Points to stable production v1 framework to eliminate 404 versioning errors
-    url = f"https://googleapis.com{api_key_clean}"
-    headers = {"Content-Type": "application/json"}
+    # FIXED: Hardcoded stable production endpoint with zero query parameter interpolation bugs
+    url = "https://googleapis.com"
+    
+    # FIXED: Secure header passage architecture rules
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key_clean
+    }
     
     prompt = (
         f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
@@ -67,7 +73,7 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
         response = requests.post(url, headers=headers, json=payload, timeout=12)
         if response.status_code == 200:
             res_json = response.json()
-            raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
+            raw_text = res_json['candidates']['content']['parts']['text']
             parsed_ai_data = json.loads(raw_text.strip())
             
             return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
@@ -90,9 +96,9 @@ with ai_col1:
     gemini_key = st.text_input(
         "Enter your Google Gemini API Key:", 
         type="password",
-        placeholder="AIzaSy... or AQ..."
+        placeholder="AQ... or AIzaSy..."
     )
-    st.caption("🔑 Configured for direct standalone text tokens.")
+    st.caption("🔑 Managed securely via native custom HTTP auth headers.")
 
 with ai_col2:
     target_ticker_select = st.selectbox(
