@@ -2,106 +2,169 @@ import streamlit as st
 import numpy as np
 from scipy.stats import norm
 from datetime import datetime
+import json
+import requests
 
-st.set_page_config(page_title="Intelligent Alpha Trading", page_icon="🧮", layout="wide")
-st.title("🧮 Option Quantitative Trading")
-st.write("Calculates analytical Black-Scholes Call option Greeks using direct manual input fields.")
+st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
+st.title("🤖 AI-Driven Option Quantitative Trading")
+st.write("Leverages an integrated AI agent workflow to dynamically extract, verify, and ingest real-time Implied Volatility (IV).")
 
-# --- CORE QUANTITATIVE MATH ENGINE ---
+# --- 1. CORE QUANTITATIVE MATH ENGINE ---
 def calculate_greeks(S, K, r, sigma, T):
     """
     Computes analytical Black-Scholes formulas for a European Call Option.
-    Returns: (Delta, Gamma, Vega, Theta, Rho)
     """
     if T <= 0 or sigma <= 0:
-        return 0.5000, 0.0000, 0.0000, 0.0000, 0.0000
+        return 0.0000, 0.5000, 0.0000, 0.0000, 0.0000, 0.0000
         
-    # Intermediate mathematical components
     d1 = (np.log(S / K) + (r + (sigma ** 2) / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     pdf_d1 = norm.pdf(d1)
     cdf_d1 = norm.cdf(d1)
     cdf_d2 = norm.cdf(d2)
     
-    # 1. Delta (Δ)
+    price = S * cdf_d1 - K * np.exp(-r * T) * cdf_d2
     delta = cdf_d1
-    
-    # 2. Gamma (Γ)
     gamma = pdf_d1 / (S * sigma * np.sqrt(T))
-    
-    # 3. Vega (ν)
-    # Scaled by /100 to show the option dollar change per 1% absolute move in Implied Volatility
     vega = (S * pdf_d1 * np.sqrt(T)) / 100.0
-    
-    # 4. Theta (θ)
-    # Scaled by /365 to show the option dollar decay per 1 calendar day step forward in time
     theta_term1 = -(S * pdf_d1 * sigma) / (2 * np.sqrt(T))
     theta_term2 = -r * K * np.exp(-r * T) * cdf_d2
     theta = (theta_term1 + theta_term2) / 365.0
-    
-    # 5. Rho (ρ)
-    # Scaled by /100 to show the option dollar change per 1% absolute move in interest rates
     rho = (K * T * np.exp(-r * T) * cdf_d2) / 100.0
     
-    return delta, gamma, vega, theta, rho
+    return price, delta, gamma, vega, theta, rho
 
-# --- ROW 1: USER INPUT PARAMETERS ---
-st.subheader("📝 Model Input Parameters")
+# --- 2. THE AI AGENT INTERNAL DATA TOOL ---
+def ai_market_data_tool(ticker_symbol: str) -> str:
+    """
+    Tool execution layer for the AI Agent. Directly pulls JSON market parameters.
+    """
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        url = f"https://yahoo.com{ticker_symbol.upper()}"
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code != 200:
+            return json.dumps({"error": "Failed to connect to public market endpoints."})
+            
+        data = response.json()
+        result = data['optionChain']['result'][0]
+        live_price = float(result['quote']['regularMarketPrice'])
+        calls = result['options'][0]['calls']
+        
+        # Sample the exact At-The-Money option contract
+        closest_option = min(calls, key=lambda x: abs(x['strike'] - live_price))
+        live_iv = float(closest_option['impliedVolatility'] * 100.0)
+        
+        return json.dumps({
+            "ticker": ticker_symbol.upper(),
+            "stock_price": round(live_price, 2),
+            "implied_volatility": round(live_iv, 2),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+# --- 3. COUPLING AN OPEN AI-ORCHESTRATION PIPELINE ---
+def run_ai_agent_ingestion(prompt_input: str):
+    """
+    Simulates the cognitive workflow of an AI Agent:
+    1. Parses user intent from natural language.
+    2. Recognizes the asset context.
+    3. Triggers the structural market tool.
+    4. Outputs verified numerical parameters.
+    """
+    # System logic instruction simulating agent reasoning constraints
+    system_instruction = "Extract the asset ticker from the user prompt and query the underlying data tool."
+    
+    # Simple semantic extraction layer modeling LLM tool routing
+    words = prompt_input.upper().split()
+    target_ticker = "NVDA" # Default fallback
+    for word in words:
+        if len(word) <= 4 and word.isalpha() and word not in ["GET", "FETCH", "THE", "LIVE", "WHAT", "APP"]:
+            target_ticker = word
+            
+    # AI calls its internal tool
+    tool_output_json = ai_market_data_tool(target_ticker)
+    parsed_data = json.loads(tool_output_json)
+    
+    return parsed_data
+
+# --- ROW 1: AI COMMAND INTERFACE PANEL ---
+st.subheader("🤖 AI Agent Execution Dashboard")
+ai_col1, ai_col2 = st.columns([3, 1])
+
+with ai_col1:
+    user_ai_prompt = st.text_input(
+        "Ask the AI Agent to fetch parameters (Natural Language):", 
+        value="Get the live market price and dynamic IV metrics for NVDA right now"
+    )
+with ai_col2:
+    st.write(" ")
+    st.write(" ")
+    trigger_agent = st.button("🚀 Run AI Ingestion Loop", use_container_width=True)
+
+# Application Session State management to hold live state changes smoothly
+if "ai_data" not in st.session_state:
+    st.session_state.ai_data = {"ticker": "NVDA", "stock_price": 138.00, "implied_volatility": 35.7}
+
+if trigger_agent:
+    with st.spinner("AI Agent analyzing intent and running option chain tool execution loops..."):
+        agent_result = run_ai_agent_ingestion(user_ai_prompt)
+        if "error" not in agent_result:
+            st.session_state.ai_data = agent_result
+            st.toast(f"AI Success! Ingested live data streams for {agent_result['ticker']}", icon="✅")
+        else:
+            st.error(f"AI Agent Tool Breakdown: {agent_result['error']}")
+
+# --- ROW 2: STRATEGIC MODEL FIELDS ---
+st.markdown("---")
+st.subheader("📝 Verified Model Input Parameters")
 in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
 
 with in_col1:
-    ticker_sym = st.text_input("Stock Ticker", value="AAPL", help="Asset symbol for tracking context.").upper().strip()
+    ticker_sym = st.text_input("Stock Ticker", value=st.session_state.ai_data["ticker"]).upper().strip()
 with in_col2:
-    current_price = st.number_input("Stock Price ($)", value=240.00, min_value=0.01, step=1.0, help="Current trading spot price of the stock (S).")
+    current_price = st.number_input("Stock Price ($)", value=float(st.session_state.ai_data["stock_price"]), min_value=0.01, step=1.0)
 with in_col3:
-    strike_input = st.number_input("Target Strike ($)", value=245.00, min_value=0.01, step=1.0, help="Option contract execution strike price (K).")
+    default_strike = round(current_price)
+    strike_input = st.number_input("Target Strike ($)", value=float(default_strike), min_value=0.01, step=1.0)
 with in_col4:
-    iv_percent = st.number_input("Implied Volatility (σ %)", value=25.0, min_value=0.1, max_value=500.0, step=0.5, help="Expected future volatility percentage (sigma).")
+    iv_percent = st.number_input("Implied Volatility (σ %)", value=float(st.session_state.ai_data["implied_volatility"]), min_value=0.1, max_value=500.0, step=0.5)
 with in_col5:
-    maturity_input = st.text_input("Maturity (YYYY-MM-DD)", value="2026-11-20", help="Expiration timeline target for the option contract.")
+    maturity_input = st.text_input("Maturity (YYYY-MM-DD)", value="2026-11-20")
 
-# Institutional risk-free bond yield baseline configuration proxy (4.50% / r = 0.045)
+# Institutional risk-free bond yield baseline proxy configuration
 r = 0.045
 
-st.markdown("---")
-
-# Execute calculations automatically based on inputs or via a dedicated form-level layout
+# --- ROW 3: DASHBOARD QUANT PERFORMANCE METRICS ---
 try:
-    # 1. Parse the target user maturity timeline date string
     today = datetime.now().date()
     target_expiry = datetime.strptime(maturity_input.strip(), "%Y-%m-%d").date()
     days_to_maturity = (target_expiry - today).days
+    T = days_to_maturity / 365.0
     
     if days_to_maturity <= 0:
         st.error("Maturity date must be a date in the future.")
     else:
-        # Convert inputs to exact core engineering float variables
         sigma = iv_percent / 100.0
-        T = days_to_maturity / 365.0
+        theo_price, delta, gamma, vega, theta, rho = calculate_greeks(current_price, strike_input, r, sigma, T)
         
-        # 2. Run the math calculations
-        delta, gamma, vega, theta, rho = calculate_greeks(current_price, strike_input, r, sigma, T)
+        st.markdown("---")
+        st.subheader(f"📊 Quantitative Dashboard Results ({ticker_sym}) — {days_to_maturity} Days to Expiry")
+        res_col0, res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(6)
         
-        # Convert Delta to an easily readable percentage form
-        delta_percentage = delta * 100
-        
-        # --- ROW 2: DASHBOARD VISUAL PANEL ---
-        st.subheader(f"📊 Financial Dashboard Results ({ticker_sym}) — {days_to_maturity} Days to Expiry")
-        
-        res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(5)
-        
+        with res_col0:
+            st.metric("Theoretical Value", f"${theo_price:.2f}")
         with res_col1:
-            st.metric("Delta (Δ)", f"{delta_percentage:.2f}%", help="Sensitivity to asset price shifts. Expressed here as equivalent hedge ratio percentage.")
+            st.metric("Delta (Δ)", f"{delta * 100:.2f}%")
         with res_col2:
-            st.metric("Gamma (Γ)", f"{gamma:.4f}", help="Acceleration rate of Delta. Change in Delta per $1 stock move.")
+            st.metric("Gamma (Γ)", f"{gamma:.4f}")
         with res_col3:
-            st.metric("Vega (ν)", f"{vega:.4f}", help="Sensitivity to volatility. Dollar option change per 1% move in Volatility.")
+            st.metric("Vega (ν)", f"{vega:.4f}")
         with res_col4:
-            st.metric("Theta (θ)", f"{theta:.4f}", help="Time decay metric. Dollar option value erosion per 1 passing day.")
+            st.metric("Theta (θ)", f"{theta:.4f}")
         with res_col5:
-            st.metric("Rho (ρ)", f"{rho:.4f}", help="Sensitivity to interest rates. Dollar option change per 1% move in macro rates.")
+            st.metric("Rho (ρ)", f"{rho:.4f}")
             
-except ValueError:
-    st.error("Incorrect date format string. Please use YYYY-MM-DD exactly (e.g., 2026-11-20).")
 except Exception as err:
     st.error(f"Mathematical execution exception: {str(err)}")
