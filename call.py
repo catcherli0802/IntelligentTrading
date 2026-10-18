@@ -7,7 +7,7 @@ import requests
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 100% AI-Driven Option Quantitative Trading")
-st.write("Uses the free Google Gemini AI API to dynamically research and ingest real-time market data parameters.")
+st.write("Uses the Gemini API to dynamically research and ingest real-time market data parameters.")
 
 # --- 1. CORE QUANTITATIVE MATH ENGINE ---
 def calculate_greeks(S, K, r, sigma, T):
@@ -34,20 +34,24 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. THE LIVE AI MODEL INGESTION ENGINE (NO HARDCODED VALUES) ---
+# --- 2. LIVE AI MODEL INGESTION ENGINE (NO HARDCODED VALUES) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
-    Calls the free Google Gemini API to dynamically look up current asset prices 
-    and 30-day implied volatility index numbers.
+    Calls the Google Gemini API using secure custom auth headers.
+    Bypasses URL string query corruption to safely ingest raw JSON properties.
     """
     if not api_key:
         return 0.0, 0.0
         
-    # Constructing a clean REST payload for Gemini's structural JSON generation engine
-    url = f"https://googleapis.com{api_key}"
-    headers = {"Content-Type": "application/json"}
+    # Standardized endpoint utilizing the active production model
+    url = "https://googleapis.com"
     
-    # Instructing the AI to search, evaluate, and output exactly the metrics you need
+    # CRITICAL SECURITY FIX: Pass key via standard system headers to support AQ.-prefix credentials smoothly
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key.strip()
+    }
+    
     prompt = (
         f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
         f"to find the absolute most recent closing/live stock price and the 30-day constant-maturity implied volatility (IV30) "
@@ -64,29 +68,31 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=12)
         if response.status_code == 200:
             res_json = response.json()
             raw_text = res_json['candidates'][0]['content']['parts'][0]['text']
             parsed_ai_data = json.loads(raw_text.strip())
             
             return float(parsed_ai_data["price"]), float(parsed_ai_data["iv"])
-    except Exception:
-        pass
+        else:
+            # Output structural response details to aid troubleshooting workflows
+            st.error(f"Gemini API returned status code {response.status_code}: {response.text}")
+    except Exception as e:
+        st.error(f"Error handling AI response buffer: {str(e)}")
     return 0.0, 0.0
 
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
-ai_col1, ai_col2, ai_col3 = st.columns([2, 2, 1])
+ai_col1, ai_col2, ai_col3 = st.columns(3)
 
 with ai_col1:
-    # Safely inputs your Google AI Key securely from the browser screen
     gemini_key = st.text_input(
         "Enter your Free Google Gemini API Key:", 
         type="password",
-        placeholder="AIzaSy..."
+        placeholder="AQ..."
     )
-    st.caption("🔑 Get a free key instantly from [Google AI Studio](https://google.com)")
+    st.caption("🔑 Key loaded via secure request headers.")
 
 with ai_col2:
     target_ticker_select = st.selectbox(
@@ -121,8 +127,6 @@ if trigger_agent:
                 st.session_state.stock_price = float(fetched_price)
                 st.session_state.implied_volatility = float(fetched_iv)
                 st.toast(f"Gemini AI Success! Loaded live metrics for {target_ticker_select}", icon="✅")
-            else:
-                st.error("Gemini AI couldn't parse the option stream metrics. Check your API key limits.")
 
 # --- ROW 2: STRATEGIC MODEL FIELDS ---
 st.markdown("---")
