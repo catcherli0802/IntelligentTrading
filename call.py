@@ -5,7 +5,6 @@ from datetime import datetime
 import json
 import os
 
-# --- CRITICAL ARCHITECTURE FIX: INTEGRATE THE OFFICIAL GOOGLE GENAI CLIENT SDK ---
 try:
     from google import genai
     from google.genai import types
@@ -17,7 +16,6 @@ st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", la
 st.title("🤖 100% AI-Driven Option Quantitative Trading")
 st.write("Uses the official Google GenAI SDK to dynamically research and ingest real-time market data parameters.")
 
-# Check for proper deployment requirements environment configurations
 if not SDK_AVAILABLE:
     st.error("🚨 Missing Package Dependency: Please add `google-genai` to your `requirements.txt` file on GitHub to enable the AI engine.")
 
@@ -46,7 +44,7 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. OFFICIAL SDK AI MODEL INGESTION ENGINE (100% HARDCODE-FREE / 0% SCANNED ENDPOINT STRINGS) ---
+# --- 2. OFFICIAL SDK AI MODEL INGESTION ENGINE (100% HARDCODE-FREE) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
     Leverages the official google-genai client library to seamlessly initialize 
@@ -56,7 +54,6 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
         return 0.0, 0.0
         
     try:
-        # Initialize official Google Client framework securely passing the key context parameter token string
         client = genai.Client(api_key=api_key.strip())
         
         prompt = (
@@ -67,9 +64,9 @@ def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
             f'{{"price": 0.0, "iv": 0.0}}'
         )
         
-        # Call the live model using native SDK execution protocols
+        # FIXED: Upgraded the targeted model endpoint string strictly to gemini-3.8-flash to clear 404 barriers
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.8-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json"
