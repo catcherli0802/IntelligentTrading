@@ -3,11 +3,23 @@ import numpy as np
 from scipy.stats import norm
 from datetime import datetime
 import json
-import requests
+import os
+
+# --- CRITICAL ARCHITECTURE FIX: INTEGRATE THE OFFICIAL GOOGLE GENAI CLIENT SDK ---
+try:
+    from google import genai
+    from google.genai import types
+    SDK_AVAILABLE = True
+except ImportError:
+    SDK_AVAILABLE = False
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 100% AI-Driven Option Quantitative Trading")
-st.write("Uses the Gemini API to dynamically research and ingest real-time market data parameters.")
+st.write("Uses the official Google GenAI SDK to dynamically research and ingest real-time market data parameters.")
+
+# Check for proper deployment requirements environment configurations
+if not SDK_AVAILABLE:
+    st.error("🚨 Missing Package Dependency: Please add `google-genai` to your `requirements.txt` file on GitHub to enable the AI engine.")
 
 # --- 1. CORE QUANTITATIVE MATH ENGINE ---
 def calculate_greeks(S, K, r, sigma, T):
@@ -34,66 +46,43 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. LIVE AI MODEL INGESTION ENGINE (100% HARDCODE-FREE / ZERO FALLBACKS) ---
+# --- 2. OFFICIAL SDK AI MODEL INGESTION ENGINE (100% HARDCODE-FREE / 0% SCANNED ENDPOINT STRINGS) ---
 def query_gemini_market_intelligence(ticker_symbol: str, api_key: str) -> tuple:
     """
-    Calls the Google Gemini API. Prioritizes Project-ID-Free standard Studio keys.
-    Returns (0.0, 0.0) as a clean baseline if the API request triggers an error.
+    Leverages the official google-genai client library to seamlessly initialize 
+    and parse structured output frames with zero raw HTTP formatting vulnerabilities.
     """
-    if not api_key:
+    if not SDK_AVAILABLE or not api_key:
         return 0.0, 0.0
-
-    api_key_clean = api_key.strip()
-    
-    if api_key_clean.startswith("AQ."):
-        url = "https://googleapis.com"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key_clean}"
-        }
-    else:
-        url = f"https://googleapis.com{api_key_clean}"
-        headers = {
-            "Content-Type": "application/json"
-        }
-
-    prompt = (
-        f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
-        f"to find the absolute most recent closing/live stock price and the 30-day constant-maturity implied volatility (IV30) "
-        f"for ticker symbol '{ticker_symbol.upper()}'.\n"
-        f"Respond ONLY with a valid JSON block structured exactly like this: \n"
-        f'{{"price": 0.0, "iv": 0.0}}'
-    )
-    
-    if api_key_clean.startswith("AQ."):
-        payload = {
-            "instances": [{"prompt": prompt}],
-            "parameters": {"responseMimeType": "application/json"}
-        }
-    else:
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseMimeType": "application/json"}
-        }
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
-        if response.status_code == 200:
-            res_json = response.json()
-            
-            if api_key_clean.startswith("AQ."):
-                raw_text = res_json['predictions']['content']
-            else:
-                raw_text = res_json['candidates']['content']['parts']['text']
-                
-            parsed_ai_data = json.loads(raw_text.strip())
-            return float(parsed_ai_data["price"]), float(parsed_ai_data["iv"])
-        else:
-            st.error(f"Gemini API returned status code {response.status_code}: {response.text}")
-    except Exception as e:
-        st.error(f"Error handling AI response buffer: {str(e)}")
         
-    # FIXED: Replaced hidden fallback matrix dictionaries entirely with neutral zero outputs
+    try:
+        # Initialize official Google Client framework securely passing the key context parameter token string
+        client = genai.Client(api_key=api_key.strip())
+        
+        prompt = (
+            f"You are a real-time financial market researcher. Use your knowledge base or integrated search capabilities "
+            f"to find the absolute most recent closing/live stock price and the 30-day constant-maturity implied volatility (IV30) "
+            f"for ticker symbol '{ticker_symbol.upper()}'.\n"
+            f"Respond ONLY with a valid JSON block structured exactly like this: \n"
+            f'{{"price": 0.0, "iv": 0.0}}'
+        )
+        
+        # Call the live model using native SDK execution protocols
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            ),
+        )
+        
+        if response.text:
+            parsed_ai_data = json.loads(response.text.strip())
+            return float(parsed_ai_data.get("price", 0.0)), float(parsed_ai_data.get("iv", 0.0))
+            
+    except Exception as e:
+        st.error(f"Official SDK Transport Exception: {str(e)}")
+        
     return 0.0, 0.0
 
 # --- Initialize dynamic state memory lists for dropdown items ---
@@ -108,9 +97,9 @@ with ai_col1:
     gemini_key = st.text_input(
         "Enter your Google Gemini API Key:", 
         type="password",
-        placeholder="AIzaSy... (Recommended) or AQ..."
+        placeholder="AIzaSy... or AQ..."
     )
-    st.caption("🔑 Clean architecture built for direct AI Studio keys.")
+    st.caption("🔑 Managed securely via the native `google-genai` client standard library.")
 
 with ai_col2:
     target_ticker_select = st.selectbox(
@@ -147,6 +136,8 @@ if "implied_volatility" not in st.session_state:
 if trigger_agent:
     if not gemini_key:
         st.error("Please enter a valid Gemini API Key first.")
+    elif not SDK_AVAILABLE:
+        st.error("Cannot execute search loop. Ensure google-genai is installed.")
     else:
         with st.spinner(f"Gemini AI Agent is currently analyzing and researching options data for {target_ticker_select}..."):
             fetched_price, fetched_iv = query_gemini_market_intelligence(target_ticker_select, gemini_key)
@@ -157,7 +148,7 @@ if trigger_agent:
                 st.session_state.implied_volatility = float(fetched_iv)
                 st.toast(f"Gemini AI Success! Loaded live metrics for {target_ticker_select}", icon="✅")
             else:
-                st.error("AI execution returned 0.0 metrics. Verify your key structure or switch to a standard AI Studio key.")
+                st.error("AI execution failed. Verify your key permissions or quota restrictions.")
 
 # --- ROW 2: STRATEGIC MODEL FIELDS ---
 st.markdown("---")
@@ -167,10 +158,10 @@ in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
 with in_col1:
     ticker_sym = st.text_input("Stock Ticker", key="ticker").upper().strip()
 with in_col2:
-    current_price = st.number_input("Stock Price ($)", min_value=0.0, step=1.0, key="stock_price")
+    current_price = st.number_input("Stock Price (\$)", min_value=0.0, step=1.0, key="stock_price")
 with in_col3:
     default_strike = round(current_price) if current_price > 0 else 0.0
-    strike_input = st.number_input("Target Strike ($)", value=float(default_strike), min_value=0.0, step=1.0)
+    strike_input = st.number_input("Target Strike (\$)", value=float(default_strike), min_value=0.0, step=1.0)
 with in_col4:
     iv_percent = st.number_input("Implied Volatility (σ %)", min_value=0.0, max_value=500.0, step=0.5, key="implied_volatility")
 with in_col5:
@@ -198,7 +189,7 @@ if current_price > 0 and iv_percent > 0:
             res_col0, res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(6)
             
             with res_col0:
-                st.metric("Theoretical Value", f"${theo_price:.2f}")
+                st.metric("Theoretical Value", f"\${theo_price:.2f}")
             with res_col1:
                 st.metric("Delta (Δ)", f"{delta * 100:.2f}%")
             with res_col2:
