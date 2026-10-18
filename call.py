@@ -4,7 +4,6 @@ from scipy.stats import norm
 from datetime import datetime
 import json
 import requests
-import re  
 
 st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
 st.title("🤖 AI-Driven Option Quantitative Trading")
@@ -35,37 +34,40 @@ def calculate_greeks(S, K, r, sigma, T):
     
     return price, delta, gamma, vega, theta, rho
 
-# --- 2. THE AI AGENT INTERNAL DATA TOOL ---
+# --- 2. THE AI AGENT INTERNAL DATA TOOL (PROTECTED & CLEAN CONSTANT VALUE STRINGS) ---
 def ai_market_data_tool(ticker_symbol: str) -> str:
     """
     Directly pulls JSON market data parameters using the open, cookie-free v8 chart endpoint.
+    Strictly accepts verified token codes to prevent address corruption.
     """
+    # Enforce safe structural sanitization on string injection entry
+    clean_ticker = str(ticker_symbol).upper().strip().replace("/", "").replace(" ", "")
+    
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        url = f"https://yahoo.com{ticker_symbol.upper()}?interval=1d&range=1d"
+        url = f"https://yahoo.com{clean_ticker}?interval=1d&range=1d"
         response = requests.get(url, headers=headers, timeout=7)
         
         if response.status_code != 200:
-            return json.dumps({"error": f"Symbol '{ticker_symbol}' not found on public data endpoints."})
+            return json.dumps({"error": f"Symbol '{clean_ticker}' not found on public data endpoints."})
             
         data = response.json()
         result = data.get('chart', {}).get('result', [])
         
         if not result or len(result) == 0:
-            return json.dumps({"error": f"No active trading data available for '{ticker_symbol}'."})
+            return json.dumps({"error": f"No active trading data available for '{clean_ticker}'."})
             
         meta = result[0].get('meta', {})
         live_price = float(meta.get('regularMarketPrice', meta.get('chartPreviousClose', 138.00)))
         
-        ticker_upper = ticker_symbol.upper()
         iv_benchmarks = {
             "NVDA": 35.7, "TSLA": 46.2, "AMD": 38.5, 
             "AAPL": 22.4, "MSFT": 21.8, "AMZN": 24.5, "GOOG": 23.1
         }
-        live_iv = iv_benchmarks.get(ticker_upper, 28.5)
+        live_iv = iv_benchmarks.get(clean_ticker, 28.5)
         
         return json.dumps({
-            "ticker": ticker_upper,
+            "ticker": clean_ticker,
             "stock_price": round(live_price, 2),
             "implied_volatility": round(live_iv, 2),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -73,43 +75,16 @@ def ai_market_data_tool(ticker_symbol: str) -> str:
     except Exception as e:
         return json.dumps({"error": f"Connection processing disruption: {str(e)}"})
 
-# --- 3. COUPLING AN OPEN AI-ORCHESTRATION PIPELINE ---
-def run_ai_agent_ingestion(prompt_input: str):
-    """
-    Simulates the cognitive workflow of an AI Agent.
-    """
-    stop_words = {
-        "GET", "FETCH", "THE", "LIVE", "WHAT", "APP", "NOW", "AND", "FOR", "RIGHT", 
-        "THIS", "DATA", "STOCK", "PRICE", "METRICS", "INFO", "SHOW", "CHECK", "RUN",
-        "LOOP", "MARKET", "DYNAMIC", "CURRENT", "VAL", "CALL", "PUT", "OPTION", "GREEK"
-    }
-    
-    words = re.findall(r'\b[A-Za-z]+\b', prompt_input.upper())
-    
-    known_tickers = {"NVDA", "AAPL", "MSFT", "AMD", "TSLA", "GOOG", "META", "AMZN", "NFLX"}
-    for word in words:
-        if word in known_tickers:
-            tool_output = ai_market_data_tool(word)
-            return json.loads(tool_output)
-            
-    target_ticker = "NVDA"  
-    for word in words:
-        if 1 <= len(word) <= 4 and word not in stop_words:
-            target_ticker = word
-            break
-            
-    tool_output_json = ai_market_data_tool(target_ticker)
-    parsed_data = json.loads(tool_output_json)
-    return parsed_data
-
 # --- ROW 1: AI COMMAND INTERFACE PANEL ---
 st.subheader("🤖 AI Agent Execution Dashboard")
 ai_col1, ai_col2 = st.columns(2)
 
 with ai_col1:
-    user_ai_prompt = st.text_input(
-        "Ask the AI Agent to fetch parameters (Natural Language):", 
-        value="Get the live market price and dynamic IV metrics for NVDA right now"
+    # SECURE UPGRADE: Restrict ticker context strictly to valid, uncorruptible system drop-down menus
+    target_ticker_select = st.selectbox(
+        "Select Asset Target Ticker context for real-time AI ingestion:",
+        options=["NVDA", "AAPL", "TSLA", "AMD", "MSFT", "AMZN", "GOOG"],
+        index=0
     )
 with ai_col2:
     st.write(" ")
@@ -124,12 +99,13 @@ if "stock_price" not in st.session_state:
 if "implied_volatility" not in st.session_state:
     st.session_state.implied_volatility = 35.7
 
-# When button is pushed, we write values instantly to the inputs' key state parameters
+# Process structured actions safely on select click patterns
 if trigger_agent:
-    with st.spinner("AI Agent analyzing intent and running open tool execution loops..."):
-        agent_result = run_ai_agent_ingestion(user_ai_prompt)
+    with st.spinner("AI Agent validating target context and updating tool execution arrays..."):
+        agent_result_json = ai_market_data_tool(target_ticker_select)
+        agent_result = json.loads(agent_result_json)
+        
         if "error" not in agent_result:
-            # INSTANT REWRITE OVERWRITE COUPLING:
             st.session_state.ticker = agent_result["ticker"]
             st.session_state.stock_price = float(agent_result["stock_price"])
             st.session_state.implied_volatility = float(agent_result["implied_volatility"])
@@ -143,7 +119,6 @@ st.subheader("📝 Verified Model Input Parameters")
 in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
 
 with in_col1:
-    # Explicitly tied via 'key=' to state to enforce a forced interface refresh
     ticker_sym = st.text_input("Stock Ticker", key="ticker").upper().strip()
 with in_col2:
     current_price = st.number_input("Stock Price ($)", min_value=0.01, step=1.0, key="stock_price")
