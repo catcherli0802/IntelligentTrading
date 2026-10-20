@@ -1,167 +1,19 @@
 import streamlit as st
-import numpy as np
-from scipy.stats import norm
-from datetime import datetime
-import json
-import re
+# Import your custom modules directly from call.py
+from call import get_option_chain_data, analyze_with_gemini
 
-st.set_page_config(page_title="Intelligent Alpha AI Quant", page_icon="🤖", layout="wide")
-st.title("🤖 100% AI-Driven Option Quantitative Trading")
-st.write("Leverages a dynamic parsing engine to ingest parameter text straight from your AI agent responses.")
+st.title("Options Analytics POC")
+ticker = st.text_input("Ticker", value="AAPL")
+api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
-# --- 1. CORE QUANTITATIVE MATH ENGINE ---
-def calculate_greeks(S, K, r, sigma, T):
-    """
-    Computes analytical Black-Scholes formulas for a European Call Option.
-    """
-    if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
-        return 0.0000, 0.5000, 0.0000, 0.0000, 0.0000, 0.0000
-        
-    d1 = (np.log(S / K) + (r + (sigma ** 2) / 2) * T) / (sigma * np.sqrt(T))
-    d2 = d1 - sigma * np.sqrt(T)
-    pdf_d1 = norm.pdf(d1)
-    cdf_d1 = norm.cdf(d1)
-    cdf_d2 = norm.cdf(d2)
+if st.button("Run Analysis") and api_key:
+    # 1. Fetch data through backend logic
+    calls, puts, spot = get_option_chain_data(ticker)
     
-    price = S * cdf_d1 - K * np.exp(-r * T) * cdf_d2
-    delta = cdf_d1
-    gamma = pdf_d1 / (S * sigma * np.sqrt(T))
-    vega = (S * pdf_d1 * np.sqrt(T)) / 100.0
-    theta_term1 = -(S * pdf_d1 * sigma) / (2 * np.sqrt(T))
-    theta_term2 = -r * K * np.exp(-r * T) * cdf_d2
-    theta = (theta_term1 + theta_term2) / 365.0
-    rho = (K * T * np.exp(-r * T) * cdf_d2) / 100.0
+    # 2. Render tables in UI
+    st.dataframe(calls)
     
-    return price, delta, gamma, vega, theta, rho
-
-# --- 2. DYNAMIC TEXT-EXTRACTION PARSING ENGINE (100% HARDCODE-FREE / ZERO API CALLS) ---
-def parse_ai_prompt_text(user_input_text: str):
-    """
-    Scans freeform natural language text to locate a valid stock ticker, 
-    the current stock price, and the implied volatility percentage.
-    """
-    text_upper = str(user_input_text).upper().strip()
-    
-    # Extract all numeric values or floating points located in the text string
-    numbers = re.findall(r'\b\d+(?:\.\d+)?\b', text_upper)
-    
-    extracted_price = 0.0
-    extracted_iv = 0.0
-    
-    if len(numbers) >= 2:
-        # Maps the first isolated float to spot price and the second to volatility %
-        extracted_price = float(numbers[0])
-        extracted_iv = float(numbers[1])
-    elif len(numbers) == 1:
-        extracted_price = float(numbers[0])
-
-    return {
-        "stock_price": extracted_price,
-        "implied_volatility": extracted_iv
-    }
-
-# --- Initialize dynamic state memory lists for dropdown items ---
-if "ticker_options" not in st.session_state:
-    st.session_state.ticker_options = ["NVDA", "GOOG", "TSLA"]
-
-# --- ROW 1: AI COMMAND INTERFACE PANEL ---
-st.subheader("🤖 AI Real-Time Parameter Ingestion Dashboard")
-ai_col1, ai_col2, ai_col3 = st.columns([1.5, 3.5, 1.5])
-
-with ai_col1:
-    # Dropdown menu to contextually track the active contract target
-    target_ticker_select = st.selectbox(
-        "Select Asset Target Dropdown:",
-        options=st.session_state.ticker_options,
-        index=0
-    )
-
-with ai_col2:
-    user_ai_prompt_dump = st.text_input(
-        "Paste the raw text response from your AI chat prompt here:", 
-        value="NVDA is trading at 214.13 with an implied volatility score of 35.7%"
-    )
-    st.caption("💡 Ask me for the active prices in chat, then paste my text output response line above.")
-
-with ai_col3:
-    st.write(" ")
-    st.write(" ")
-    trigger_agent = st.button("🚀 Ingest AI Parameters", use_container_width=True)
-
-# Initialize fields completely pristine and blank to avoid hardcoded default visuals
-if "ticker" not in st.session_state:
-    st.session_state.ticker = ""
-if "stock_price" not in st.session_state:
-    st.session_state.stock_price = 0.0
-if "implied_volatility" not in st.session_state:
-    st.session_state.implied_volatility = 0.0
-
-# Process data sync actions instantly using exact text extraction configurations
-if trigger_agent and user_ai_prompt_dump:
-    with st.spinner("AI parsing engine scanning prompt text text boundaries..."):
-        parsed_metrics = parse_ai_prompt_text(user_ai_prompt_dump)
-        
-        if parsed_metrics["stock_price"] > 0:
-            # 100% PROGRAMMATIC HARDCODE-FREE OVERWRITE COUPLING
-            st.session_state.ticker = target_ticker_select
-            st.session_state.stock_price = float(parsed_metrics["stock_price"])
-            st.session_state.implied_volatility = float(parsed_metrics["implied_volatility"])
-            st.toast(f"AI Success! Synchronized metrics for {target_ticker_select}", icon="✅")
-        else:
-            st.error("Text parsing failed. Ensure your pasted text snippet contains visible numerical parameters.")
-
-# --- ROW 2: STRATEGIC MODEL FIELDS ---
-st.markdown("---")
-st.subheader("📝 Verified Model Input Parameters")
-in_col1, in_col2, in_col3, in_col4, in_col5 = st.columns(5)
-
-with in_col1:
-    ticker_sym = st.text_input("Stock Ticker", key="ticker").upper().strip()
-with in_col2:
-    current_price = st.number_input("Stock Price ($)", min_value=0.0, step=1.0, key="stock_price")
-with in_col3:
-    default_strike = round(current_price) if current_price > 0 else 0.0
-    strike_input = st.number_input("Target Strike ($)", value=float(default_strike), min_value=0.0, step=1.0)
-with in_col4:
-    iv_percent = st.number_input("Implied Volatility (σ %)", min_value=0.0, max_value=500.0, step=0.5, key="implied_volatility")
-with in_col5:
-    maturity_input = st.text_input("Maturity (YYYY-MM-DD)", value="2026-11-20")
-
-# Institutional risk-free bond yield baseline proxy configuration
-r = 0.045
-
-# --- ROW 3: DASHBOARD QUANT PERFORMANCE METRICS ---
-if current_price > 0 and iv_percent > 0:
-    try:
-        today = datetime.now().date()
-        target_expiry = datetime.strptime(maturity_input.strip(), "%Y-%m-%d").date()
-        days_to_maturity = (target_expiry - today).days
-        T = days_to_maturity / 365.0
-        
-        if days_to_maturity <= 0:
-            st.error("Maturity date must be a date in the future.")
-        else:
-            sigma = iv_percent / 100.0
-            theo_price, delta, gamma, vega, theta, rho = calculate_greeks(current_price, strike_input, r, sigma, T)
-            
-            st.markdown("---")
-            st.subheader(f"📊 Quantitative Dashboard Results ({ticker_sym}) — {days_to_maturity} Days to Expiry")
-            res_col0, res_col1, res_col2, res_col3, res_col4, res_col5 = st.columns(6)
-            
-            with res_col0:
-                st.metric("Theoretical Value", f"${theo_price:.2f}")
-            with res_col1:
-                st.metric("Delta (Δ)", f"{delta * 100:.2f}%")
-            with res_col2:
-                st.metric("Gamma (Γ)", f"{gamma:.4f}")
-            with res_col3:
-                st.metric("Vega (ν)", f"{vega:.4f}")
-            with res_col4:
-                st.metric("Theta (θ)", f"{theta:.4f}")
-            with res_col5:
-                st.metric("Rho (ρ)", f"{rho:.4f}")
-                
-    except Exception as err:
-        st.error(f"Mathematical execution exception: {str(err)}")
-else:
-    st.info("💡 Select a ticker, paste our chat response text into the box above, and click 'Ingest AI Parameters' to view real-time Black-Scholes metrics.")
+    # 3. Fire Gemini analysis pipeline
+    with st.spinner("Analyzing market structure..."):
+        report = analyze_with_gemini(ticker, spot, calls, puts, api_key)
+    st.markdown(report)
